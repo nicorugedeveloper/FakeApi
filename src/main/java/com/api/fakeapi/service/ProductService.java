@@ -1,62 +1,70 @@
 package com.api.fakeapi.service;
 
+import com.api.fakeapi.model.request.CreateProductApiRequest;
+import com.api.fakeapi.model.request.CreateProductLocalRequest;
 import com.api.fakeapi.model.request.ProductRequest;
-import com.api.fakeapi.model.response.CategoryResponse;
+import com.api.fakeapi.model.response.CreateProductResponse;
+import com.api.fakeapi.model.response.ProductApiResponse;
 import com.api.fakeapi.model.response.ProductResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Collections;
+
 @Service
+@RequiredArgsConstructor
 public class ProductService {
 
-    private final WebClient webClient;
+    private final WebClient.Builder webClientBuilder;
 
-    public ProductService(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder.baseUrl("https://api.escuelajs.co/api/v1").build();
-    }
+    @Value("${base.url.api}")
+    private String baseApiUrl;
 
     public Flux<ProductResponse> getAllProducts() {
-        return this.webClient.get()
-                .uri("/products")
+        String apiUrl = baseApiUrl + "/api/v1/products";
+
+        return this.webClientBuilder.build()
+                .get()
+                .uri(apiUrl)
                 .retrieve()
-                .bodyToFlux(ProductResponse.class)
+                .bodyToFlux(ProductRequest.class)
                 .map(product -> {
-                    ProductResponse response = new ProductResponse();
-                    response.setPid(product.getPid());
-                    response.setName(product.getName());
-                    response.setPriceFinal(product.getPriceFinal());
-                    response.setDescription(product.getDescription());
+                    ProductResponse productResponse = new ProductResponse();
 
-                    if (product.getCategory() != null) {
-                        CategoryResponse categoryResponse = new CategoryResponse();
-                        categoryResponse.setCid(product.getCategory().getCid());
-                        categoryResponse.setTitle(product.getCategory().getTitle());
-                        response.setCategory(categoryResponse);
-                    }
+                    productResponse.setPid(product.getId());
+                    productResponse.setName(product.getTitle());
+                    productResponse.setPriceFinal(product.getPrice());
+                    productResponse.setDescription(product.getDescription());
 
-                    response.setImages(product.getImages());
-                    return response;
+                    return productResponse;
                 });
     }
-    public Flux<CategoryResponse> getAllCategories() {
-        return this.webClient.get()
-                .uri("/categories")
+
+    public Mono<CreateProductResponse> createProduct(CreateProductLocalRequest productRequest) {
+        String apiUrl = baseApiUrl + "/api/v1/products/";
+
+        CreateProductApiRequest createProductApiRequest = new CreateProductApiRequest();
+
+        createProductApiRequest.setTitle(productRequest.getName());
+        createProductApiRequest.setPrice(productRequest.getPriceFinal());
+        createProductApiRequest.setDescription(productRequest.getDescription());
+        createProductApiRequest.setCategoryId(productRequest.getCategoryId());
+        createProductApiRequest.setImages(Collections.singletonList(productRequest.getImageUrl()));
+
+        return this.webClientBuilder.build()
+                .post()
+                .uri(apiUrl)
+                .bodyValue(createProductApiRequest)
                 .retrieve()
-                .bodyToFlux(CategoryResponse.class)
-                .map(category -> {
-                    CategoryResponse response = new CategoryResponse();
-                    response.setCid(category.getCid());
-                    response.setTitle(category.getTitle());
-                    return response;
+                .bodyToMono(ProductApiResponse.class)
+                .map(productApiResponse -> {
+                    CreateProductResponse createProductResponse = new CreateProductResponse();
+                    createProductResponse.setPid(productApiResponse.getId());
+                    return createProductResponse;
                 });
-    }
-    public Mono<Integer> createProduct(ProductRequest productRequest) {
-        return this.webClient.post()
-                .uri("/products")
-                .bodyValue(productRequest)
-                .retrieve()
-                .bodyToMono(Integer.class);
     }
 }
